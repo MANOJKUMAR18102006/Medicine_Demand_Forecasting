@@ -1,0 +1,38 @@
+{
+  "comparison": [
+    {
+      "model": "Linear Regression",
+      "mae": 13.92,
+      "rmse": 20.16,
+      "r2": 0.8029,
+      "mape": 40.2
+    },
+    {
+      "model": "Random Forest",
+      "mae": 13.08,
+      "rmse": 18.5,
+      "r2": 0.834,
+      "mape": 30.2
+    },
+    {
+      "model": "XGBoost Regressor",
+      "mae": 12.68,
+      "rmse": 17.67,
+      "r2": 0.8486,
+      "mape": 28.23
+    }
+  ],
+  "best_model": {
+    "model_name": "XGBoost Regressor",
+    "file_key": "xgboost",
+    "mae": 12.68,
+    "rmse": 17.67,
+    "r2": 0.8486,
+    "mape": 28.23
+  },
+  "evaluation_period": {
+    "test_start": "2024-09-01",
+    "test_end": "2024-12-31",
+    "test_records": 2196
+  }
+}

@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
@@ -8,23 +8,33 @@ venv/
 env/
 .venv/
 
-# Environment variables
+# Environment variables and secrets
 .env
-.env.local
+.env.*
+!.env.example
 
 # Node
 node_modules/
 dist/
 build/
-.npm
+.npm/
 
-# Jupyter Notebook checkpoints
+# Jupyter
 .ipynb_checkpoints/
 
-# Data & Models (keep raw datasets out of git tracking if large)
+# Local database
+backend/meddemand.db
+*.sqlite
+*.sqlite3
+
+# Large raw datasets
 dataset/raw/*.csv
+
+# Generated model files
 models/*.joblib
 models/*.pkl
+ml/models/*.joblib
+ml/models/*.pkl
 
 # OS files
 .DS_Store
