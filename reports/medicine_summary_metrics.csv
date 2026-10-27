@@ -1,0 +1,19 @@
+Medicine,Medicine_Category,Total_Demand,Avg_Daily_Demand,Median_Demand,Std_Demand,Min_Demand,Max_Demand,Avg_Stock_Level,Outlier_Spike_Days,CV
+Paracetamol,Analgesic & Antipyretic,195556,178.4,172.0,50.2,0,453,686.2,24,0.281
+Vitamin C,Vitamins & Immunity,128510,117.3,113.0,33.6,0,312,456.1,32,0.286
+Metformin,Antidiabetic,115612,105.5,105.0,20.3,57,283,590.3,15,0.192
+Omeprazole,Gastrointestinal,103508,94.4,92.0,19.5,50,208,443.6,24,0.206
+Ibuprofen,NSAID & Pain Relief,97924,89.3,87.0,19.8,49,298,419.1,27,0.221
+Pantoprazole,Gastrointestinal,95020,86.7,84.0,18.5,41,279,429.0,34,0.214
+Cetirizine,Antihistamine & Allergy,93764,85.6,81.0,32.4,0,243,349.4,26,0.378
+Cough Syrup,Respiratory,87404,79.7,79.0,33.2,5,241,279.7,20,0.416
+Atorvastatin,Cardiovascular,82606,75.4,74.0,15.9,37,174,416.8,22,0.211
+Amlodipine,Cardiovascular,76562,69.9,69.0,14.3,33,151,379.3,16,0.205
+ORS,Rehydration & Electrolytes,74067,67.6,55.0,50.2,0,371,224.5,13,0.743
+Diclofenac,NSAID & Pain Relief,70543,64.4,62.0,17.7,0,171,277.0,30,0.275
+Amoxicillin,Antibiotic,66566,60.7,59.0,20.6,13,151,241.1,24,0.34
+Aspirin,Analgesic & Antiplatelet,65594,59.8,59.0,11.8,29,124,324.2,19,0.197
+Losartan,Cardiovascular,59540,54.3,54.0,11.8,23,96,313.5,13,0.217
+Montelukast,Respiratory & Allergy,53373,48.7,47.0,15.6,7,140,209.2,27,0.321
+Azithromycin,Antibiotic,44835,40.9,40.0,14.8,11,131,178.2,17,0.362
+Insulin,Antidiabetic,31945,29.1,29.0,7.9,11,94,167.4,18,0.271
