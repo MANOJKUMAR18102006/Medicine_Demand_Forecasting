@@ -66,6 +66,10 @@ def create_shop_medicine(
         initial_stock=payload.initial_stock,
         safety_stock=payload.safety_stock or 20,
         reorder_threshold=payload.reorder_threshold or 50,
+        dosage_form=payload.dosage_form or "Tablets",
+        strength=payload.strength or "Standard",
+        manufacturer=payload.manufacturer or "Generic Pharma",
+        batch_number=payload.batch_number,
     )
 
 

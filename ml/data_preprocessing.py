@@ -1,9 +1,15 @@
 """
 Data Preprocessing Module for Medicine Demand Forecasting.
-
-Handles ingestion, inspection, sorting, deduplication, missing value treatment,
-non-destructive outlier detection, and daily continuity validation for historical
-medicine consumption datasets.
+================================================================================
+Stage 2 in the Data Science Lifecycle:
+  1. Data Loading: Ingest historical medicine sales CSV.
+  2. Chronological Sorting: Order records by Medicine and Date.
+  3. Missing Value Imputation: Forward/backward fill within each medicine time series.
+  4. Deduplication: Detect and remove duplicate (Date, Medicine) records.
+  5. Bounds Validation: Clip negative quantities/stocks to zero.
+  6. Outlier Tagging: Non-destructive IQR surge identification.
+  7. Continuity Check: Verify zero missing calendar days.
+================================================================================
 """
 
 import os
@@ -14,7 +20,8 @@ import pandas as pd
 
 def load_dataset(file_path: str) -> pd.DataFrame:
     """
-    Load medicine demand dataset from CSV and convert Date column to datetime.
+    Step 1: Load medicine demand dataset from CSV and parse dates.
+    Converting 'Date' to datetime allows date-based math, sorting, and feature extraction.
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Dataset file not found at: {file_path}")
@@ -26,7 +33,8 @@ def load_dataset(file_path: str) -> pd.DataFrame:
 
 def inspect_dataset(df: pd.DataFrame) -> Dict[str, Any]:
     """
-    Inspect dataset schema, shape, data types, and summary statistics.
+    Step 1b: Inspect dataset schema, dimensions, data types, and summary statistics.
+    Useful during initial EDA to verify column types and numerical ranges.
     """
     info = {
         "shape": df.shape,
@@ -39,23 +47,27 @@ def inspect_dataset(df: pd.DataFrame) -> Dict[str, Any]:
 
 def sort_records(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Sort records chronologically by Medicine and Date.
+    Step 2: Sort records chronologically by Medicine and Date.
+    CRITICAL: Time-series lag and rolling statistics require data to be in strict chronological order.
     """
     return df.sort_values(by=["Medicine", "Date"]).reset_index(drop=True)
 
 
 def detect_missing_values(df: pd.DataFrame) -> pd.Series:
     """
-    Count missing values across all columns.
+    Step 3a: Count missing values (nulls/NaNs) across all columns.
     """
     return df.isnull().sum()
 
 
 def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Handle missing values appropriately per medicine group:
-    - Numerical time-series metrics: forward-fill then backward-fill within each medicine group.
-    - Weather/environment: median by month/season.
+    Step 3b: Handle missing values appropriately:
+    - Time-series metrics (Quantity_Sold, Stock_Level, Unit_Price):
+      Use forward-fill (carry last known value) followed by backward-fill within each medicine group.
+      This preserves temporal autocorrelation better than simple mean imputation.
+    - Weather metrics (Temperature, Rainfall):
+      Impute with seasonal/monthly median values.
     """
     df_cleaned = df.copy()
     if df_cleaned.isnull().values.any():
@@ -80,7 +92,8 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
 
 def detect_and_remove_duplicates(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
     """
-    Detect and deduplicate identical (Date, Medicine) records, retaining the first occurrence.
+    Step 4: Detect and deduplicate identical (Date, Medicine) records.
+    Ensures that each medicine has at most one sales record per calendar day.
     """
     duplicate_count = int(df.duplicated(subset=["Date", "Medicine"]).sum())
     if duplicate_count > 0:
@@ -92,8 +105,9 @@ def detect_and_remove_duplicates(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
 
 def validate_and_correct_numeric_bounds(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
     """
-    Check for impossible negative values in Quantity_Sold and Stock_Level.
-    Clips negatives to 0 to prevent downstream modeling errors.
+    Step 5: Enforce non-negative bounds for physical quantities.
+    Quantity_Sold and Stock_Level cannot physically be negative.
+    Any negative values from logging glitches are clipped to 0.
     """
     df_bounded = df.copy()
     invalid_counts = {
@@ -114,9 +128,13 @@ def detect_demand_outliers(
     df: pd.DataFrame, iqr_multiplier: float = 1.5
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """
-    Detect statistical outliers in Quantity_Sold on a per-medicine basis using IQR.
-    Note: Outliers are tagged (Is_Demand_Outlier) but PRESERVED to retain legitimate
-    demand surges (e.g., epidemic waves, seasonal outbreaks, bulk orders).
+    Step 6: Non-destructive Outlier Tagging via Interquartile Range (IQR).
+    Formula:
+      IQR = Q3 - Q1
+      Upper Bound = Q3 + (1.5 * IQR)
+    WHY NON-DESTRUCTIVE: Medicine demand surges during epidemics or seasonal outbreaks
+    are real, valid business events. We flag them (Is_Demand_Outlier=1) instead of
+    deleting them, allowing the ML model to learn from demand spikes.
     """
     df_flagged = df.copy()
     df_flagged["Is_Demand_Outlier"] = 0

@@ -28,3 +28,8 @@ class InventoryAnalysisResponse(BaseModel):
     category: str
     unit_price: float
     forecast_timeline: List[ForecastItem]
+    can_exchange: Optional[bool] = False
+    can_buy: Optional[bool] = False
+    surplus_shops_count: Optional[int] = 0
+    suppliers_count: Optional[int] = 0
+    replenishment_message: Optional[str] = None

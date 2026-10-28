@@ -14,6 +14,10 @@ class MedicineCreateRequest(BaseModel):
     initial_stock: int = Field(100, ge=0, description="Starting inventory units on hand")
     safety_stock: Optional[int] = Field(20, ge=0, description="Safety stock buffer")
     reorder_threshold: Optional[int] = Field(50, ge=0, description="Minimum reorder threshold")
+    dosage_form: Optional[str] = Field("Tablets", max_length=50)
+    strength: Optional[str] = Field("Standard", max_length=50)
+    manufacturer: Optional[str] = Field("Generic Pharma", max_length=100)
+    batch_number: Optional[str] = Field(None, max_length=50)
 
 
 class MedicineItemResponse(BaseModel):
@@ -26,7 +30,14 @@ class MedicineItemResponse(BaseModel):
     current_stock: int
     safety_stock: int
     reorder_threshold: int
+    reserved_stock: Optional[int] = 0
+    dosage_form: Optional[str] = "Tablets"
+    strength: Optional[str] = "Standard"
+    manufacturer: Optional[str] = "Generic Pharma"
+    batch_number: Optional[str] = None
     expiry_date: Optional[str] = None
+    can_exchange: Optional[bool] = False
+    can_buy: Optional[bool] = False
     created_at: Optional[str] = None
 
 

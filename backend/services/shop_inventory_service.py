@@ -35,14 +35,19 @@ class ShopInventoryService:
                     m.category,
                     m.unit_of_measurement,
                     m.unit_price,
+                    COALESCE(m.dosage_form, 'Tablets') AS dosage_form,
+                    COALESCE(m.strength, 'Standard') AS strength,
+                    COALESCE(m.manufacturer, 'Generic Pharma') AS manufacturer,
+                    m.batch_number,
                     COALESCE(i.current_stock, 0) AS current_stock,
                     COALESCE(i.safety_stock, 20) AS safety_stock,
                     COALESCE(i.reorder_threshold, 50) AS reorder_threshold,
+                    COALESCE(i.reserved_stock, 0) AS reserved_stock,
                     i.expiry_date,
                     m.created_at
                 FROM medicines m
                 LEFT JOIN inventories i ON m.id = i.medicine_id
-                WHERE m.shop_id = ?
+                WHERE m.shop_id = ? AND COALESCE(m.is_archived, 0) = 0
                 ORDER BY m.medicine_name ASC;
                 """,
                 (shop_id,),
@@ -56,7 +61,7 @@ class ShopInventoryService:
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT medicine_name FROM medicines WHERE shop_id = ? ORDER BY medicine_name ASC;",
+                "SELECT medicine_name FROM medicines WHERE shop_id = ? AND COALESCE(is_archived, 0) = 0 ORDER BY medicine_name ASC;",
                 (shop_id,),
             )
             return [row["medicine_name"] for row in cursor.fetchall()]
@@ -72,6 +77,10 @@ class ShopInventoryService:
         initial_stock: int = 100,
         safety_stock: int = 20,
         reorder_threshold: int = 50,
+        dosage_form: str = "Tablets",
+        strength: str = "Standard",
+        manufacturer: str = "Generic Pharma",
+        batch_number: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Add a new medicine and initial stock record to the authenticated shop's catalog."""
         med_clean = medicine_name.strip()
@@ -96,16 +105,16 @@ class ShopInventoryService:
 
             cursor.execute(
                 """
-                INSERT INTO medicines (id, shop_id, medicine_name, category, unit_of_measurement, unit_price)
-                VALUES (?, ?, ?, ?, ?, ?);
+                INSERT INTO medicines (id, shop_id, medicine_name, category, unit_of_measurement, unit_price, dosage_form, strength, manufacturer, batch_number, is_archived)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);
                 """,
-                (med_id, shop_id, med_clean, cat_clean, unit_of_measurement.strip(), float(unit_price)),
+                (med_id, shop_id, med_clean, cat_clean, unit_of_measurement.strip(), float(unit_price), dosage_form, strength, manufacturer, batch_number),
             )
 
             cursor.execute(
                 """
-                INSERT INTO inventories (id, shop_id, medicine_id, current_stock, safety_stock, reorder_threshold)
-                VALUES (?, ?, ?, ?, ?, ?);
+                INSERT INTO inventories (id, shop_id, medicine_id, current_stock, safety_stock, reorder_threshold, reserved_stock)
+                VALUES (?, ?, ?, ?, ?, ?, 0);
                 """,
                 (inv_id, shop_id, med_id, int(initial_stock), int(safety_stock), int(reorder_threshold)),
             )
@@ -126,9 +135,14 @@ class ShopInventoryService:
                     m.category,
                     m.unit_of_measurement,
                     m.unit_price,
+                    COALESCE(m.dosage_form, 'Tablets') AS dosage_form,
+                    COALESCE(m.strength, 'Standard') AS strength,
+                    COALESCE(m.manufacturer, 'Generic Pharma') AS manufacturer,
+                    m.batch_number,
                     COALESCE(i.current_stock, 0) AS current_stock,
                     COALESCE(i.safety_stock, 20) AS safety_stock,
                     COALESCE(i.reorder_threshold, 50) AS reorder_threshold,
+                    COALESCE(i.reserved_stock, 0) AS reserved_stock,
                     i.expiry_date,
                     m.created_at
                 FROM medicines m
@@ -306,7 +320,8 @@ class ShopInventoryService:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                SELECT m.id, m.medicine_name, m.category, m.unit_price, i.current_stock, i.safety_stock
+                SELECT m.id, m.medicine_name, m.category, m.unit_price, 
+                       i.current_stock, i.safety_stock, COALESCE(i.reserved_stock, 0) AS reserved_stock
                 FROM medicines m
                 LEFT JOIN inventories i ON m.id = i.medicine_id
                 WHERE m.shop_id = ? AND m.medicine_name = ? COLLATE NOCASE;
@@ -329,6 +344,9 @@ class ShopInventoryService:
         else:
             stock_to_use = 500
 
+        reserved_stock = int(shop_med["reserved_stock"]) if shop_med and shop_med.get("reserved_stock") else 0
+        effective_stock = max(0, stock_to_use - reserved_stock)
+
         # Safety stock
         # Historical standard deviation from dataset or fallback
         std_demand = 25.0
@@ -347,11 +365,11 @@ class ShopInventoryService:
             safety_stock = max(safety_stock, int(shop_med["safety_stock"]))
 
         required_stock = predicted_demand + safety_stock
-        expected_shortage = max(0, required_stock - stock_to_use)
-        recommended_order_quantity = max(0, required_stock - stock_to_use)
+        expected_shortage = max(0, required_stock - effective_stock)
+        recommended_order_quantity = max(0, required_stock - effective_stock)
 
         status_label = classify_inventory_status(
-            stock_to_use, predicted_demand, safety_stock, required_stock
+            effective_stock, predicted_demand, safety_stock, required_stock
         )
 
         if status_label == "Critical":
@@ -362,6 +380,42 @@ class ShopInventoryService:
             recommendation = f"No immediate reorder needed. Current stock ({stock_to_use:,} units) covers {days}-day demand and safety buffer."
         else:
             recommendation = f"Overstocked. Current inventory ({stock_to_use:,} units) exceeds 200% of required stock. Delay replenishments."
+
+        # Smart replenishment discovery: Exchange and Supplier options
+        can_exchange = False
+        can_buy = False
+        surplus_shops_count = 0
+        suppliers_count = 0
+        replenishment_message = None
+
+        try:
+            from backend.services.exchange_service import ExchangeService
+            surplus_shops = ExchangeService.find_surplus_shops(shop_id, med_clean)
+            surplus_shops_count = len(surplus_shops)
+            can_exchange = surplus_shops_count > 0
+        except Exception:
+            can_exchange = False
+
+        try:
+            from backend.services.procurement_service import ProcurementService
+            supplier_prods = ProcurementService.search_products(query=med_clean)
+            exact_prods = [p for p in supplier_prods if p["medicine_name"].lower() == med_clean.lower()]
+            suppliers_count = len(exact_prods) if exact_prods else len(supplier_prods)
+            can_buy = suppliers_count > 0
+        except Exception:
+            can_buy = False
+
+        if status_label in ("Critical", "Low Stock"):
+            if can_exchange and can_buy:
+                replenishment_message = f"Both replenishment options available: {surplus_shops_count} peer medical shop(s) have verified surplus, and {suppliers_count} authorized supplier(s) have ready stock. You may request an Exchange Nearby or Buy Medicine directly."
+            elif can_exchange:
+                replenishment_message = f"Peer exchange available: {surplus_shops_count} registered medical shop(s) have verified surplus stock ready for exchange transfer."
+            elif can_buy:
+                replenishment_message = f"Supplier procurement available: {suppliers_count} authorized supplier catalog(s) have immediate stock available for purchase order."
+            else:
+                replenishment_message = "Replenishment Warning: Neither nearby peer shops have transferable surplus nor authorized suppliers have available catalog stock for this drug."
+        else:
+            replenishment_message = "Stock level is sufficient to cover forecasted demand and safety buffers. No urgent replenishment required."
 
         # Save forecast to history
         cls.save_forecast_history(
@@ -388,6 +442,11 @@ class ShopInventoryService:
             "category": shop_med["category"] if shop_med else forecast_result.get("category", "General"),
             "unit_price": shop_med["unit_price"] if shop_med else forecast_result.get("unit_price", 10.0),
             "forecast_timeline": forecast_result["forecast"],
+            "can_exchange": can_exchange,
+            "can_buy": can_buy,
+            "surplus_shops_count": surplus_shops_count,
+            "suppliers_count": suppliers_count,
+            "replenishment_message": replenishment_message,
         }
 
     @classmethod
@@ -454,16 +513,41 @@ class ShopInventoryService:
             else:
                 suff_count += 1
 
+            # Check surplus peer shops and supplier availability
+            with get_db() as c_conn:
+                c_cur = c_conn.cursor()
+                c_cur.execute(
+                    """
+                    SELECT COUNT(*) AS cnt FROM medicines m
+                    JOIN inventories i ON m.id = i.medicine_id
+                    WHERE m.shop_id != ? AND m.medicine_name = ? COLLATE NOCASE
+                      AND (i.current_stock - i.safety_stock - COALESCE(i.reserved_stock, 0)) > 0;
+                    """,
+                    (shop_id, med_name),
+                )
+                surplus_peer_cnt = c_cur.fetchone()["cnt"]
+
+                c_cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM supplier_products WHERE medicine_name = ? COLLATE NOCASE AND available_quantity > 0;",
+                    (med_name,),
+                )
+                sup_prod_cnt = c_cur.fetchone()["cnt"]
+
             item_alert = {
                 "medicine": med_name,
                 "category": m["category"],
                 "current_stock": curr_stock,
+                "reserved_stock": int(m.get("reserved_stock") or 0),
                 "predicted_demand": pred_7d,
                 "safety_stock": safety_stock,
                 "required_stock": required_stock,
                 "expected_shortage": shortage,
                 "status": status_label,
                 "recommended_order": rec_order,
+                "can_exchange": surplus_peer_cnt > 0,
+                "can_buy": sup_prod_cnt > 0,
+                "surplus_shops_count": surplus_peer_cnt,
+                "suppliers_count": sup_prod_cnt,
             }
             alerts.append(item_alert)
 

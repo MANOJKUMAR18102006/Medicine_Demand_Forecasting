@@ -147,15 +147,33 @@ npm run dev
 ```
 - Dashboard URL: `http://localhost:5173`
 
-### 3. Run the Test Suites
+### 3. Run the Data Science & ML Demonstration (Viva-Ready)
+```bash
+python scripts/data_science_demo.py
+```
+*Optional parameters:*
+```bash
+# Custom medicine and horizon
+python scripts/data_science_demo.py --medicine Paracetamol --days 7
+
+# Fast mode (uses serialized models instead of full retraining)
+python scripts/data_science_demo.py --skip-train
+```
+
+### 4. Run the Test Suites
+
+**End-to-End ML Pipeline & Original API Test Suite:**
+```bash
+python ml/test_system.py
+```
 
 **Multi-Shop Authentication & Data Isolation Test Suite:**
 ```bash
 python backend/test_multi_shop_auth.py
 ```
 
-**End-to-End ML Pipeline & Original API Test Suite:**
+**Procurement & Nearby Exchange Test Suite:**
 ```bash
-python ml/test_system.py
+python backend/test_procurement_exchange.py
 ```
 
